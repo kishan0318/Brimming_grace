@@ -1,7 +1,5 @@
-from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 from .authentication import ExpiringTokenAuthentication
 from .serializers import *
 from rest_framework.permissions import *
@@ -9,7 +7,20 @@ from django.contrib.auth import authenticate
 from rest_framework.authtoken.models import Token
 import datetime
 import pytz
+
 # Create your views here.
+
+class Register(APIView):
+    permission_classes=[IsAdminUser]
+    def post(self,request,*args,**kwargs):
+        Serializer=RegisterSer(data=request.data)
+        user=request.data.get('username')
+        if Serializer.is_valid(raise_exception=True):
+            Serializer.save()
+            User.objects.filter(username=user).update(is_staff=True)
+            return Response({'message':'A staff user created successfully','data':Serializer.data},200)
+        return Response({'message':'something went wrong...'},400)
+
 
 class Login(APIView):
     def post(self,request,*args,**kwargs):
@@ -21,7 +32,7 @@ class Login(APIView):
         else:
             utc_now=datetime.datetime.utcnow()
             utc_now=utc_now.replace(tzinfo=pytz.utc)
-            Token.objects.filter(user=qs,created__lt=utc_now-datetime.timedelta(minutes=5)).delete()
+            Token.objects.filter(user=qs,created__lt=utc_now-datetime.timedelta(minutes=60)).delete()
             token , _ =Token.objects.get_or_create(user=qs)
             token.save()
             data={'username':qs.username,'token':token.key}
@@ -35,12 +46,11 @@ class StudentsCRUD(APIView):
 
     def get(self,request,*args,**kwargs):
         try:
-
-            qs=Students.objects.all().order_by('-id')
-            serializer=StudentSer(qs,many=True).data
-            return Response({'data':serializer},200)
-        except Exception as e:return Response({'message':"Can not find the student"},400)
-
+            qs=Students.objects.get(id=kwargs.get('pk'))
+            Serializer=StudentSer(qs,context={'request':request})
+            return Response({'message':'data retrived successfully','data':Serializer.data},200)
+        except Exception as e:
+            return Response({'message':[str(e)]},400)
 
     def post(self,request):
         serializer=StudentCreateSerializer(data=request.data)
@@ -89,5 +99,3 @@ class StudentsCRUD(APIView):
             return Response({'message':'Deleted successfully'},200)
         except:
             return Response({'message':'Student does not exist'},400)
-
-
